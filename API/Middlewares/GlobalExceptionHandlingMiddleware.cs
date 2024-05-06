@@ -1,28 +1,41 @@
 using System.Net;
+using System.Text.Json;
+using Microsoft.AspNetCore.Mvc;
 
 namespace API.Middlewares;
 
-public class GlobalExceptionHandlingMiddleware
+public class GlobalExceptionHandlingMiddleware : IMiddleware
 {
-    public readonly RequestDelegate _next;
-    public readonly ILogger _logger;
+    private readonly ILogger<GlobalExceptionHandlingMiddleware> _logger;
 
-    public GlobalExceptionHandlingMiddleware(RequestDelegate next, ILogger logger)
+    public GlobalExceptionHandlingMiddleware(ILogger<GlobalExceptionHandlingMiddleware> logger)
     {
-        _next = next;
         _logger = logger;
     }
-
-    public async Task InvokeAsync(HttpContext context)
+    
+    public async Task InvokeAsync(HttpContext context, RequestDelegate next)
     {
         try
         {
-            await _next(context);
+            await next(context);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, ex.Message);
             context.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
+
+            ProblemDetails problem = new()
+            {
+                Status = (int)HttpStatusCode.InternalServerError,
+                Type = "Server Error",
+                Title = "Server Error",
+                Detail = "An internal server has occured"
+            };
+
+            var json = JsonSerializer.Serialize(problem);
+            
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsync(json);
         }
     }
 }
